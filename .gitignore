@@ -1,0 +1,6 @@
+# Build directory
+hyperdx/
+
+# OS files
+.DS_Store
+Thumbs.db

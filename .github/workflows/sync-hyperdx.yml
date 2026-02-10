@@ -1,0 +1,127 @@
+name: Sync HyperDX Release
+
+on:
+  # Manual trigger with required tag
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'HyperDX release tag (e.g., @hyperdx/app@2.16.0)'
+        required: true
+        type: string
+
+  # Can be triggered from HyperDX repository
+  repository_dispatch:
+    types: [new-release]
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Determine HyperDX version
+        id: version
+        run: |
+          # Priority: workflow_dispatch input > repository_dispatch payload
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            echo "Using tag from workflow input: $TAG"
+          elif [ -n "${{ github.event.client_payload.tag }}" ]; then
+            TAG="${{ github.event.client_payload.tag }}"
+            echo "Using tag from repository dispatch: $TAG"
+          else
+            echo "Error: TAG is required"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check if version already synced
+        id: check
+        run: |
+          SKIP=$(make check-version TAG=${{ steps.version.outputs.tag }})
+          echo "Check result: $SKIP"
+          echo "$SKIP" >> $GITHUB_OUTPUT
+
+          if [ "$SKIP" = "skip=true" ]; then
+            echo "Version ${{ steps.version.outputs.tag }} already synced"
+          fi
+
+      - name: Fetch Node.js version from HyperDX
+        id: node-version
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          NODE_VERSION=$(curl -s https://raw.githubusercontent.com/hyperdxio/hyperdx/${{ steps.version.outputs.tag }}/.nvmrc)
+          echo "Node version: $NODE_VERSION"
+          echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+
+      - name: Run sync via Makefile
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          make sync TAG=${{ steps.version.outputs.tag }}
+
+      - name: Get synced version
+        if: steps.check.outputs.skip != 'true'
+        id: synced
+        run: |
+          VERSION=$(cat HYPERDX_VERSION)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Synced version: $VERSION"
+
+      - name: Commit and push changes
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add out HYPERDX_VERSION
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "$(cat <<'EOF'
+          chore: sync HyperDX ${{ steps.synced.outputs.version }}
+
+          Built from hyperdxio/hyperdx@${{ steps.synced.outputs.version }}
+          EOF
+          )"
+
+            # Create and push tag
+            git tag -a "${{ steps.synced.outputs.version }}" -m "Sync HyperDX ${{ steps.synced.outputs.version }}"
+
+            git push
+            git push --tags
+
+            echo "Changes committed and pushed with tag ${{ steps.synced.outputs.version }}"
+          fi
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## HyperDX Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "HYPERDX_VERSION" ]; then
+            CURRENT=$(cat HYPERDX_VERSION)
+            echo "- **Current Version:** $CURRENT" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "- **Target:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Skipped:** ${{ steps.check.outputs.skip == 'skip=true' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check.outputs.skip }}" != "skip=true" ] && [ -n "${{ steps.synced.outputs.version }}" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Successfully synced HyperDX ${{ steps.synced.outputs.version }}!" >> $GITHUB_STEP_SUMMARY
+          fi
