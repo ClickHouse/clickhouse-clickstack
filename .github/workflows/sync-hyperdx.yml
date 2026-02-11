@@ -27,9 +27,6 @@ jobs:
           if [ -n "${{ github.event.inputs.tag }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
             echo "Using tag from workflow input: $TAG"
-          elif [ -n "${{ github.event.client_payload.tag }}" ]; then
-            TAG="${{ github.event.client_payload.tag }}"
-            echo "Using tag from repository dispatch: $TAG"
           else
             echo "Error: TAG is required"
             exit 1
@@ -40,7 +37,7 @@ jobs:
       - name: Check if version already synced
         id: check
         run: |
-          SKIP=$(make check-version TAG=${{ steps.version.outputs.tag }})
+          SKIP=$(make check-version TAG="${{ steps.version.outputs.tag }}")
           echo "Check result: $SKIP"
           echo "$SKIP" >> $GITHUB_OUTPUT
 
@@ -59,7 +56,7 @@ jobs:
         id: node-version
         if: steps.check.outputs.skip != 'true'
         run: |
-          NODE_VERSION=$(curl -s https://raw.githubusercontent.com/hyperdxio/hyperdx/${{ steps.version.outputs.tag }}/.nvmrc)
+          NODE_VERSION=$(curl -s https://raw.githubusercontent.com/hyperdxio/hyperdx/@hyperdx/app@${{ steps.version.outputs.tag }}/.nvmrc)
           echo "Node version: $NODE_VERSION"
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
 
@@ -147,7 +144,7 @@ jobs:
           - Updated HyperDX to ${{ steps.synced.outputs.version }}
           - Built static files available in `out/` directory
 
-          See [upstream release](https://github.com/hyperdxio/hyperdx/releases/tag/${{ steps.synced.outputs.version }}) for details.
+          See [upstream release](https://github.com/hyperdxio/hyperdx/releases/tag/@hyperdx/app@${{ steps.synced.outputs.version }}) for details.
           EOF
 
           gh release create "${{ steps.synced.outputs.version }}" \

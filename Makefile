@@ -13,31 +13,31 @@ help:
 	@echo "======================"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make sync TAG=@hyperdx/app@2.16.0  - Clone, build, and sync HyperDX (full workflow)"
-	@echo "  make clone TAG=@hyperdx/app@2.16.0 - Clone HyperDX at specific tag"
-	@echo "  make build                         - Build HyperDX from cloned source"
-	@echo "  make sync-files                    - Copy built files to repository"
-	@echo "  make clean                         - Remove build directory"
-	@echo "  make version                       - Show current synced version"
-	@echo "  make check-version                 - Check if current version matches TAG"
+	@echo "  make sync TAG=2.16.0  - Clone, build, and sync HyperDX (full workflow)"
+	@echo "  make clone TAG=2.16.0 - Clone HyperDX at specific tag"
+	@echo "  make build            - Build HyperDX from cloned source"
+	@echo "  make sync-files       - Copy built files to repository"
+	@echo "  make clean            - Remove build directory"
+	@echo "  make version          - Show current synced version"
+	@echo "  make check-version    - Check if current version matches TAG"
 	@echo ""
 	@echo "Variables:"
-	@echo "  TAG - HyperDX release tag (REQUIRED, format: @hyperdx/app@VERSION)"
+	@echo "  TAG - HyperDX release tag version (REQUIRED)"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make sync TAG=@hyperdx/app@2.16.0  - Sync specific version"
+	@echo "  make sync TAG=2.16.0  - Sync specific version"
 	@echo ""
 
 # Clone HyperDX repository
 clone:
 ifeq ($(TAG),UNSET)
 	@echo "Error: TAG is required"
-	@echo "Usage: make clone TAG=@hyperdx/app@2.16.0"
+	@echo "Usage: make clone TAG=2.16.0"
 	@exit 1
 endif
 	@echo "Cloning HyperDX $(TAG)..."
 	@rm -rf $(HYPERDX_DIR)
-	@git clone --depth 1 --branch $(TAG) $(HYPERDX_REPO) $(HYPERDX_DIR)
+	@git clone --depth 1 --branch @hyperdx/app@$(TAG) $(HYPERDX_REPO) $(HYPERDX_DIR)
 	@echo "✓ Successfully cloned HyperDX $(TAG)"
 
 # Build HyperDX
