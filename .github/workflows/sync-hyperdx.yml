@@ -9,10 +9,6 @@ on:
         required: true
         type: string
 
-  # Can be triggered from HyperDX repository
-  repository_dispatch:
-    types: [new-release]
-
 jobs:
   build-and-sync:
     runs-on: ubuntu-latest
@@ -136,6 +132,27 @@ jobs:
               echo "⚠ Commit not pushed to main (not latest @hyperdx/app release)"
             fi
           fi
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.skip != 'true' && steps.is-latest.outputs.is_latest == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CH_BOT_PAT }}
+        run: |
+          cat > release_notes.md <<'EOF'
+          Synced from hyperdxio/hyperdx@${{ steps.synced.outputs.version }}
+
+          Built HyperDX app and updated to latest release.
+
+          **Changes:**
+          - Updated HyperDX to ${{ steps.synced.outputs.version }}
+          - Built static files available in `out/` directory
+
+          See [upstream release](https://github.com/hyperdxio/hyperdx/releases/tag/${{ steps.synced.outputs.version }}) for details.
+          EOF
+
+          gh release create "${{ steps.synced.outputs.version }}" \
+            --title "HyperDX ${{ steps.synced.outputs.version }}" \
+            --notes-file release_notes.md
 
       - name: Create summary
         if: always()
