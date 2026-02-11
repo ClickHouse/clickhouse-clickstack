@@ -52,6 +52,11 @@ jobs:
             echo "Version ${{ steps.version.outputs.tag }} already synced"
           fi
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Fetch Node.js version from HyperDX
         id: node-version
         if: steps.check.outputs.skip != 'true'
@@ -79,6 +84,25 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Synced version: $VERSION"
 
+      - name: Check if version is latest @hyperdx/app release
+        if: steps.check.outputs.skip != 'true'
+        id: is-latest
+        run: |
+          # Fetch latest @hyperdx/app release (filter releases by tag prefix)
+          LATEST=$(curl -s https://api.github.com/repos/hyperdxio/hyperdx/releases?per_page=100 | \
+            jq -r '[.[] | select(.tag_name | startswith("@hyperdx/app@"))] | .[0].tag_name')
+
+          echo "Latest @hyperdx/app release: $LATEST"
+          echo "Current version: ${{ steps.synced.outputs.version }}"
+
+          if [ "${{ steps.synced.outputs.version }}" = "$LATEST" ]; then
+            echo "is_latest=true" >> $GITHUB_OUTPUT
+            echo "✓ This is the latest @hyperdx/app release - will push to main"
+          else
+            echo "is_latest=false" >> $GITHUB_OUTPUT
+            echo "⚠ This is not the latest @hyperdx/app release - will not push to main"
+          fi
+
       - name: Commit and push changes
         if: steps.check.outputs.skip != 'true'
         run: |
@@ -97,13 +121,18 @@ jobs:
           EOF
           )"
 
-            # Create and push tag
+            # Always create and push tag
             git tag -a "${{ steps.synced.outputs.version }}" -m "Sync HyperDX ${{ steps.synced.outputs.version }}"
-
-            git push
             git push --tags
 
-            echo "Changes committed and pushed with tag ${{ steps.synced.outputs.version }}"
+            # Only push commit to main if this is the latest @hyperdx/app release
+            if [ "${{ steps.is-latest.outputs.is_latest }}" = "true" ]; then
+              git push
+              echo "✓ Changes committed and pushed to main with tag ${{ steps.synced.outputs.version }}"
+            else
+              echo "✓ Tag ${{ steps.synced.outputs.version }} created and pushed"
+              echo "⚠ Commit not pushed to main (not latest @hyperdx/app release)"
+            fi
           fi
 
       - name: Create summary
