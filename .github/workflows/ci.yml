@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate out directory exists
+        run: |
+          if [ ! -d "out" ]; then
+            echo "❌ Error: 'out' directory does not exist"
+            exit 1
+          fi
+          echo "✓ 'out' directory exists"
+
+      - name: Validate Next.js build structure
+        run: |
+          echo "Validating Next.js build structure..."
+
+          # Check for _next directory (required for Next.js builds)
+          if [ ! -d "out/_next" ]; then
+            echo "❌ Error: 'out/_next' directory not found"
+            echo "A valid Next.js static export should contain a '_next' directory"
+            exit 1
+          fi
+          echo "✓ Found '_next' directory"
+
+          # Check for index.html (entry point)
+          if [ ! -f "out/index.html" ]; then
+            echo "❌ Error: 'out/index.html' not found"
+            echo "A valid Next.js build should contain an index.html"
+            exit 1
+          fi
+          echo "✓ Found index.html"
+
+          # Check for 404.html (common in Next.js static exports)
+          if [ ! -f "out/404.html" ]; then
+            echo "⚠ Warning: 'out/404.html' not found (optional but recommended)"
+          else
+            echo "✓ Found 404.html"
+          fi
+
+          # Verify _next contains static assets
+          if [ ! -d "out/_next/static" ]; then
+            echo "❌ Error: 'out/_next/static' directory not found"
+            echo "Next.js builds should contain static assets in '_next/static'"
+            exit 1
+          fi
+          echo "✓ Found '_next/static' directory"
+
+          echo ""
+          echo "========================================="
+          echo "✓ All validations passed!"
+          echo "========================================="
+
+      - name: Generate build report
+        run: |
+          echo "## Next.js Build Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Status:** Valid Next.js build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count HTML files
+          HTML_COUNT=$(find out -name "*.html" -type f | wc -l)
+          echo "- **HTML files:** $HTML_COUNT" >> $GITHUB_STEP_SUMMARY
+
+          # Check _next directory size
+          NEXT_SIZE=$(du -sh out/_next | cut -f1)
+          echo "- **_next directory size:** $NEXT_SIZE" >> $GITHUB_STEP_SUMMARY
+
+          # Total out directory size
+          OUT_SIZE=$(du -sh out | cut -f1)
+          echo "- **Total build size:** $OUT_SIZE" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Contents" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -lah out/ >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          # Check HYPERDX_VERSION if exists
+          if [ -f "HYPERDX_VERSION" ]; then
+            VERSION=$(cat HYPERDX_VERSION)
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**HyperDX Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          fi
