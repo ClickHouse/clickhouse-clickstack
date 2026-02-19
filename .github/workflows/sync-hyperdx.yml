@@ -85,7 +85,7 @@ jobs:
         run: |
           # Fetch latest @hyperdx/app release (filter releases by tag prefix)
           LATEST=$(curl -s https://api.github.com/repos/hyperdxio/hyperdx/releases?per_page=100 | \
-            jq -r '[.[] | select(.tag_name | startswith("@hyperdx/app@"))] | .[0].tag_name')
+            jq -r '[.[] | select(.tag_name | startswith("@hyperdx/app@"))] | .[0].tag_name | sub("@hyperdx/app@"; "")')
 
           echo "Latest @hyperdx/app release: $LATEST"
           echo "Current version: ${{ steps.synced.outputs.version }}"
