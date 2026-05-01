@@ -1,0 +1,70 @@
+name: Update ClickHouse Submodule
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'HYPERDX_VERSION'
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get ClickStack version
+        id: version
+        run: |
+          VERSION=$(curl -s "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/HYPERDX_VERSION")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create branch and PR in ClickHouse
+        env:
+          GH_TOKEN: ${{ secrets.CH_BOT_PAT }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NEW_SUBMODULE_SHA="${{ github.sha }}"
+          SHORT_SHA=$(echo "$NEW_SUBMODULE_SHA" | cut -c1-7)
+          BRANCH="auto/update-clickstack-${VERSION}"
+
+          # Check if submodule already points to this commit
+          CURRENT_SHA=$(gh api repos/ClickHouse/ClickHouse/contents/contrib/clickstack --jq '.sha')
+          if [ "$CURRENT_SHA" = "$NEW_SUBMODULE_SHA" ]; then
+            echo "Submodule already up to date"
+            exit 0
+          fi
+
+          # Get master HEAD and its tree
+          MASTER_SHA=$(gh api repos/ClickHouse/ClickHouse/git/ref/heads/master --jq '.object.sha')
+          BASE_TREE=$(gh api "repos/ClickHouse/ClickHouse/git/commits/$MASTER_SHA" --jq '.tree.sha')
+
+          # Create tree with updated submodule, commit, and branch
+          NEW_TREE=$(gh api repos/ClickHouse/ClickHouse/git/trees \
+            -f "base_tree=$BASE_TREE" \
+            -f "tree[][path]=contrib/clickstack" \
+            -f "tree[][mode]=160000" \
+            -f "tree[][type]=commit" \
+            -f "tree[][sha]=$NEW_SUBMODULE_SHA" \
+            --jq '.sha')
+
+          NEW_COMMIT=$(gh api repos/ClickHouse/ClickHouse/git/commits \
+            -f "message=Update ClickStack to HyperDX ${VERSION}" \
+            -f "tree=$NEW_TREE" \
+            -f "parents[]=$MASTER_SHA" \
+            --jq '.sha')
+
+          gh api repos/ClickHouse/ClickHouse/git/refs \
+            -f "ref=refs/heads/$BRANCH" \
+            -f "sha=$NEW_COMMIT"
+
+          # Open PR
+          gh pr create \
+            --repo ClickHouse/ClickHouse \
+            --base master \
+            --head "$BRANCH" \
+            --title "Update ClickStack to HyperDX ${VERSION}" \
+            --body "## Summary
+          - Updates the \`contrib/clickstack\` submodule to HyperDX ${VERSION}
+          - Synced from [ClickHouse/clickhouse-clickstack@${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+
+          See [upstream release](https://github.com/hyperdxio/hyperdx/releases/tag/@hyperdx/app@${VERSION}) for details."
