@@ -151,6 +151,56 @@ jobs:
             --title "HyperDX ${{ steps.synced.outputs.version }}" \
             --notes-file release_notes.md
 
+      - name: Determine deploy status
+        if: steps.check.outputs.skip != 'true' && always()
+        id: status
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "status=succeeded" >> $GITHUB_OUTPUT
+            echo "color=good" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "color=danger" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Slack Notification
+        if: steps.check.outputs.skip != 'true' && always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: repo,workflow,commit,author
+          custom_payload: |
+            {
+              "text": "ClickStack Embedded release ${{ steps.status.outputs.status }}",
+              "attachments": [{
+                "color": "${{ steps.status.outputs.color }}",
+                "fields": [
+                  {
+                    "title": "Status",
+                    "value": "${{ steps.status.outputs.status }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Version",
+                    "value": "${{ steps.synced.outputs.version || steps.version.outputs.tag }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Commit",
+                    "value": "<https://github.com/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>",
+                    "short": false
+                  },
+                  {
+                    "title": "Author",
+                    "value": "${{ github.actor }}",
+                    "short": true
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_HYPERDX_NOTIFS }}
+
       - name: Create summary
         if: always()
         run: |
