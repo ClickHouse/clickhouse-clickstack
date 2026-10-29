@@ -34,12 +34,17 @@ jobs:
             exit 0
           fi
 
+          # The bot can't push to ClickHouse/ClickHouse (writes there 404), so branch in its fork and PR from that
+          FORK=$(gh api repos/ClickHouse/ClickHouse/forks -F default_branch_only=true --jq '.full_name')
+          # Forking is async on first run, so retry; this also fast-forwards the fork's master to upstream
+          for _ in $(seq 30); do gh api "repos/$FORK/merge-upstream" -f branch=master && break; sleep 10; done
+
           # Get master HEAD and its tree
-          MASTER_SHA=$(gh api repos/ClickHouse/ClickHouse/git/ref/heads/master --jq '.object.sha')
-          BASE_TREE=$(gh api "repos/ClickHouse/ClickHouse/git/commits/$MASTER_SHA" --jq '.tree.sha')
+          MASTER_SHA=$(gh api "repos/$FORK/git/ref/heads/master" --jq '.object.sha')
+          BASE_TREE=$(gh api "repos/$FORK/git/commits/$MASTER_SHA" --jq '.tree.sha')
 
           # Create tree with updated submodule, commit, and branch
-          NEW_TREE=$(gh api repos/ClickHouse/ClickHouse/git/trees \
+          NEW_TREE=$(gh api "repos/$FORK/git/trees" \
             -f "base_tree=$BASE_TREE" \
             -f "tree[][path]=contrib/clickstack" \
             -f "tree[][mode]=160000" \
@@ -47,13 +52,13 @@ jobs:
             -f "tree[][sha]=$NEW_SUBMODULE_SHA" \
             --jq '.sha')
 
-          NEW_COMMIT=$(gh api repos/ClickHouse/ClickHouse/git/commits \
+          NEW_COMMIT=$(gh api "repos/$FORK/git/commits" \
             -f "message=Update ClickStack to HyperDX ${VERSION}" \
             -f "tree=$NEW_TREE" \
             -f "parents[]=$MASTER_SHA" \
             --jq '.sha')
 
-          gh api repos/ClickHouse/ClickHouse/git/refs \
+          gh api "repos/$FORK/git/refs" \
             -f "ref=refs/heads/$BRANCH" \
             -f "sha=$NEW_COMMIT"
 
@@ -61,7 +66,7 @@ jobs:
           gh pr create \
             --repo ClickHouse/ClickHouse \
             --base master \
-            --head "$BRANCH" \
+            --head "${FORK%%/*}:$BRANCH" \
             --title "Update ClickStack to HyperDX ${VERSION}" \
             --body "## Summary
           - Updates the \`contrib/clickstack\` submodule to HyperDX ${VERSION}
